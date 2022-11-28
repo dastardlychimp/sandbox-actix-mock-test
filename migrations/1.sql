@@ -1,0 +1,35 @@
+create table if not exists test (
+    id serial primary key,
+    col1 text not null
+);
+
+insert into test (col1) values 
+    ('a'),
+    ('b'),
+    ('c'),
+    ('d'),
+    ('e'),
+    ('f'),
+    ('g'),
+    ('h'),
+    ('i'),
+    ('j'),
+    ('k'),
+    ('l'),
+    ('m'),
+    ('n'),
+    ('o'),
+    ('p'),
+    ('q'),
+    ('r'),
+    ('s'),
+    ('t'),
+    ('u'),
+    ('v'),
+    ('w'),
+    ('x'),
+    ('y'),
+    ('z'),
+    ('cantaloupe'),
+    ('crimson'),
+    ('yellowfish');
