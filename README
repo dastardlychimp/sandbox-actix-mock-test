@@ -1,0 +1,20 @@
+## POC acitx-web/mockall
+
+### setup
+```sh
+# Starts up a postgres database in docker with a simple table
+make all
+```
+
+
+### run/test
+```sh
+# Runs tests/examples. Some connect to pg. Some are mocked.
+cargo test
+```
+
+```sh
+# Throws up an actix server to show using postgres.
+# Navigate to http://localhost:5990/list
+cargo run
+```
