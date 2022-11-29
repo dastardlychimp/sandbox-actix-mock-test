@@ -1,32 +1,42 @@
 use async_trait::async_trait;
 use thiserror;
-use sqlx::{prelude::*, PgPool, query_as_unchecked};
+use sqlx::{prelude::*, PgPool};
+use serde::Serialize;
 
 #[cfg(test)]
 use mockall::*;
 
 #[derive(sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct TR {
     id: i32,
     col1: String,
 }
 
 #[async_trait]
-trait Datasource {
-    type Error;
+pub trait Datasource {
+    type Error: std::fmt::Debug;
 
     async fn select_all_test(&self) -> Result<Vec<TR>, Self::Error>;
 
     async fn select_last_test(&self) -> Result<TR, Self::Error>;
 }
 
-struct Post {
+
+#[derive(Clone)]
+pub struct PgDatasource {
     pool: PgPool
+}
+
+impl PgDatasource {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
 }
 
 #[cfg_attr(test, automock)]
 #[async_trait]
-impl Datasource for Post {
+impl Datasource for PgDatasource {
     type Error = sqlx::Error;
 
     async fn select_all_test(&self) -> Result<Vec<TR>, Self::Error> {
@@ -45,7 +55,7 @@ impl Datasource for Post {
 }
 
 
-mod model {
+pub(crate) mod model {
     use super::*;
 
     #[derive(Debug, thiserror::Error)]
@@ -54,7 +64,7 @@ mod model {
         DatasourceError(#[from] E)
     }
 
-    pub async fn get_datas_start_with_char<E>(datasource: &dyn Datasource<Error = E>, starting_char: char) -> Result<Vec<String>, ModelError<E>>
+    pub async fn get_datas_start_with_char<E: std::fmt::Debug>(datasource: &dyn Datasource<Error = E>, starting_char: char) -> Result<Vec<String>, ModelError<E>>
     {
         let rows = datasource.select_all_test().await?;
 
@@ -79,7 +89,7 @@ mod test {
     #[actix_web::test]
     async fn test_pg() {
         let pool = PgPool::connect(env!("DATABASE_URL")).await.unwrap();
-        let db = Post { pool };
+        let db = PgDatasource::new(pool);
         let results = db.select_all_test().await.unwrap();
 
         assert!(results.len() > 1)
@@ -88,7 +98,7 @@ mod test {
     #[actix_web::test]
     async fn test_all_rows_with_char() {
         let pool = PgPool::connect(env!("DATABASE_URL")).await.unwrap();
-        let db = Post { pool };
+        let db = PgDatasource::new(pool);
         let results = model::get_datas_start_with_char(&db, 'c')
             .await
             .unwrap();
@@ -107,7 +117,7 @@ mod test {
                 col1: String::from(v),
             })
             .collect::<Vec<_>>();
-        let mut mock = MockPost::new();
+        let mut mock = MockPgDatasource::new();
         mock.expect_select_all_test().return_once(move || Ok(mocked_values));
 
         let results = model::get_datas_start_with_char(&mock, 'c').await.unwrap();
@@ -117,7 +127,7 @@ mod test {
 
     #[actix_web::test]
     async fn test_mock_error() {
-        let mut mock = MockPost::new();
+        let mut mock = MockPgDatasource::new();
         mock.expect_select_all_test().return_once(move || Err(sqlx::Error::PoolTimedOut));
 
         let results = model::get_datas_start_with_char(&mock, 'c').await.unwrap_err();
