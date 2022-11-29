@@ -1,18 +1,22 @@
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+use sqlx::{PgPool};
 use thiserror;
-use sqlx::{prelude::*, PgPool};
-use serde::Serialize;
 
 #[cfg(test)]
 use mockall::*;
 
-#[derive(sqlx::FromRow)]
-#[derive(Serialize)]
+pub mod handlers;
+
+#[derive(sqlx::FromRow, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct TR {
     id: i32,
     col1: String,
 }
 
+// Associated type must be defined for the mock. We could do anyhow::Error for these?
+// Or as seen below, you can mock an implementation of it, which has a different type.
+#[cfg_attr(test, automock(type Error=String;))]
 #[async_trait]
 pub trait Datasource {
     type Error: std::fmt::Debug;
@@ -22,10 +26,9 @@ pub trait Datasource {
     async fn select_last_test(&self) -> Result<TR, Self::Error>;
 }
 
-
 #[derive(Clone)]
 pub struct PgDatasource {
-    pool: PgPool
+    pool: PgPool,
 }
 
 impl PgDatasource {
@@ -54,28 +57,32 @@ impl Datasource for PgDatasource {
     }
 }
 
-
 pub(crate) mod model {
     use super::*;
 
     #[derive(Debug, thiserror::Error)]
     pub enum ModelError<E> {
         #[error("datasource error: {0:?}")]
-        DatasourceError(#[from] E)
+        DatasourceError(#[from] E),
     }
 
-    pub async fn get_datas_start_with_char<E: std::fmt::Debug>(datasource: &dyn Datasource<Error = E>, starting_char: char) -> Result<Vec<String>, ModelError<E>>
-    {
+    pub async fn get_datas_start_with_char<E: std::fmt::Debug>(
+        datasource: &dyn Datasource<Error = E>,
+        starting_char: char,
+    ) -> Result<Vec<String>, ModelError<E>> {
         let rows = datasource.select_all_test().await?;
 
-        let filtered_rows = rows.into_iter().filter_map(|row|
-            if row.col1.starts_with(starting_char) {
-                Some(row.col1)
-            } else {
-                None
-            }
-        ).collect::<_>();
-        
+        let filtered_rows = rows
+            .into_iter()
+            .filter_map(|row| {
+                if row.col1.starts_with(starting_char) {
+                    Some(row.col1)
+                } else {
+                    None
+                }
+            })
+            .collect::<_>();
+
         Ok(filtered_rows)
     }
 }
@@ -83,8 +90,6 @@ pub(crate) mod model {
 #[cfg(test)]
 mod test {
     use super::*;
-    use actix_web::{test};
-
 
     #[actix_web::test]
     async fn test_pg() {
@@ -99,13 +104,10 @@ mod test {
     async fn test_all_rows_with_char() {
         let pool = PgPool::connect(env!("DATABASE_URL")).await.unwrap();
         let db = PgDatasource::new(pool);
-        let results = model::get_datas_start_with_char(&db, 'c')
-            .await
-            .unwrap();
+        let results = model::get_datas_start_with_char(&db, 'c').await.unwrap();
 
         assert_eq!(results, vec!["c", "cantaloupe", "crimson"]);
     }
-
 
     #[actix_web::test]
     async fn test_mock() {
@@ -117,8 +119,9 @@ mod test {
                 col1: String::from(v),
             })
             .collect::<Vec<_>>();
-        let mut mock = MockPgDatasource::new();
-        mock.expect_select_all_test().return_once(move || Ok(mocked_values));
+        let mut mock = MockDatasource::new();
+        mock.expect_select_all_test()
+            .return_once(move || Ok(mocked_values));
 
         let results = model::get_datas_start_with_char(&mock, 'c').await.unwrap();
 
@@ -128,11 +131,16 @@ mod test {
     #[actix_web::test]
     async fn test_mock_error() {
         let mut mock = MockPgDatasource::new();
-        mock.expect_select_all_test().return_once(move || Err(sqlx::Error::PoolTimedOut));
+        mock.expect_select_all_test()
+            .return_once(move || Err(sqlx::Error::PoolTimedOut));
 
-        let results = model::get_datas_start_with_char(&mock, 'c').await.unwrap_err();
+        let results = model::get_datas_start_with_char(&mock, 'c')
+            .await
+            .unwrap_err();
 
-        assert!(matches!(results, model::ModelError::DatasourceError(sqlx::Error::PoolTimedOut)));
+        assert!(matches!(
+            results,
+            model::ModelError::DatasourceError(sqlx::Error::PoolTimedOut)
+        ));
     }
-
 }
