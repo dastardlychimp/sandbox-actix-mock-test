@@ -106,7 +106,7 @@ pub mod auth {
 
             let mut args = PgArguments::default();
             args.add(key);
-            let limit = sqlx::query_with("SELECT limit FROM key_limit WHERE key = $1", args)
+            let limit = sqlx::query_with("SELECT \"limit\" FROM key_limit WHERE \"key\" = $1", args)
                 .fetch_optional(&mut conn)
                 .await?
                 .map(|r| r.try_get("limit").map(|i: i32| i as usize))
