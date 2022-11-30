@@ -56,7 +56,7 @@ mod tests {
     use std::sync::Arc;
     use mockall::predicate::*;
 
-    #[actix_web::test]
+    #[actix_rt::test]
     async fn test_mock_list_request() {
         let expected = vec![TR {
             id: 6,
@@ -79,7 +79,7 @@ mod tests {
     }
 
     // Integration style can use extractors
-    #[actix_web::test]
+    #[actix_rt::test]
     async fn test_mock_list_extractor() {
         let expected = vec![TR {
             id: 6,
@@ -93,11 +93,11 @@ mod tests {
         let arc_data: Arc<dyn Datasource<Error = sqlx::Error> > = Arc::new(mock);
         let data = Data::from(arc_data);
 
-        let app = test::init_service(App::new().service(list_extractor).app_data(data)).await;
+        let mut app = test::init_service(App::new().service(list_extractor).app_data(data)).await;
 
         let req = test::TestRequest::default().uri("/list").to_request();
 
-        let resp = test::call_service(&app, req).await;
+        let resp = test::call_service(&mut app, req).await;
         let body = test::read_body_json::<Vec<TR>, _>(resp).await;
         assert_eq!(body, expected);
     }

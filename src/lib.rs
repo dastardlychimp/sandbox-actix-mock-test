@@ -151,8 +151,9 @@ pub(crate) mod model {
 #[cfg(test)]
 mod test {
     use super::*;
+    use actix_rt;
 
-    #[actix_web::test]
+    #[actix_rt::test]
     async fn test_pg() {
         let pool = PgPool::connect(env!("DATABASE_URL")).await.unwrap();
         let db = PgDatasource::new(pool);
@@ -161,7 +162,7 @@ mod test {
         assert!(results.len() > 1)
     }
 
-    #[actix_web::test]
+    #[actix_rt::test]
     async fn test_all_rows_with_char() {
         let pool = PgPool::connect(env!("DATABASE_URL")).await.unwrap();
         let db = PgDatasource::new(pool);
@@ -170,7 +171,7 @@ mod test {
         assert_eq!(results, vec!["c", "cantaloupe", "crimson"]);
     }
 
-    #[actix_web::test]
+    #[actix_rt::test]
     async fn test_mock() {
         let mocked_values = vec!["cornflour", "Delta", "California", "elegant", "creatures"]
             .into_iter()
@@ -189,7 +190,7 @@ mod test {
         assert_eq!(results, vec!["cornflour", "creatures"]);
     }
 
-    #[actix_web::test]
+    #[actix_rt::test]
     async fn test_mock_error() {
         let mut mock = MockPgDatasource::new();
         mock.expect_select_all_test()
