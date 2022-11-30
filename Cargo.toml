@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-actix-rt = "2.7.0"
+actix-rt = "1.1.1"
 # actix-web = { package = "actix-web", version = "4.2.1", optional = true}
 actix-web = { package = "actix-web", version = "3.3.2"}
 async-trait = "0.1.58"

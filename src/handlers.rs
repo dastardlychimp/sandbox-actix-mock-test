@@ -103,7 +103,7 @@ mod tests {
     }
     
     // Integration style can use extractors
-    #[actix_web::test]
+    #[actix_rt::test]
     async fn test_mock_list_limited() {
         let mut mock = MockPgDatasource::new();
         let it = std::iter::repeat(TR {id: -1, col1: "repeat".to_string()});
@@ -131,7 +131,7 @@ mod tests {
             Data::from(arc_data)
         };
 
-        let app = test::init_service(
+        let mut app = test::init_service(
             App::new()
                 .service(list_with_limits)
                 .app_data(mock_datasource)
@@ -141,13 +141,13 @@ mod tests {
         {
             let key = "noworks";
             let req = test::TestRequest::default().uri(&format!("/listl?key={}", key)).to_request();
-            let resp = test::call_service(&app, req).await;
+            let resp = test::call_service(&mut app, req).await;
             assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
         }
         {
             let key = "works";
             let req = test::TestRequest::default().uri(&format!("/listl?key={}", key)).to_request();
-            let resp = test::call_service(&app, req).await;
+            let resp = test::call_service(&mut app, req).await;
             assert_eq!(resp.status(), StatusCode::OK);
             let body = test::read_body_json::<Vec<TR>, _>(resp).await;
             assert_eq!(body.len(), 10);
@@ -155,7 +155,7 @@ mod tests {
         {
             let key = auth::UNLIMITED_KEY;
             let req = test::TestRequest::default().uri(&format!("/listl?key={}", key)).to_request();
-            let resp = test::call_service(&app, req).await;
+            let resp = test::call_service(&mut app, req).await;
             assert_eq!(resp.status(), StatusCode::OK);
             let body = test::read_body_json::<Vec<TR>, _>(resp).await;
             assert_eq!(body.len(), 50);
