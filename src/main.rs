@@ -13,14 +13,18 @@ use std::sync::Arc;
 async fn main() -> std::io::Result<()> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("debug"));
     let pool = PgPool::connect(env!("DATABASE_URL")).await.unwrap();
-    let db: Arc<dyn Datasource<Error = sqlx::Error> + Send + Sync> =
-        Arc::new(PgDatasource::new(pool));
-    let db_data = Data::from(db);
+    let arc_db = Arc::new(PgDatasource::new(pool));
+
+    let datasource = Data::from(arc_db.clone() as Arc<dyn Datasource<Error = sqlx::Error>>);
+    let auth_datasource =
+        Data::from(arc_db.clone() as Arc<dyn auth::AuthDatasource<Error = sqlx::Error>>);
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
-            .app_data(db_data.clone())
+            .app_data(datasource.clone())
+            .app_data(auth_datasource.clone())
             .service(handlers::list_extractor)
+            .service(handlers::list_with_limits)
             .service(web::resource("/listr").route(web::get().to(handlers::list_request)))
             .route("/", web::get().to(|| HttpResponse::Ok()))
     })

@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use sqlx::{PgPool};
+use sqlx::{PgPool, postgres::PgArguments, Row, Arguments};
 use thiserror;
 
 #[cfg(test)]
@@ -18,7 +18,7 @@ pub struct TR {
 // Or as seen below, you can mock an implementation of it, which has a different type.
 #[cfg_attr(test, automock(type Error=String;))]
 #[async_trait]
-pub trait Datasource {
+pub trait Datasource: Send + Sync {
     type Error: std::fmt::Debug;
 
     async fn select_all_test(&self) -> Result<Vec<TR>, Self::Error>;
@@ -37,7 +37,28 @@ impl PgDatasource {
     }
 }
 
-#[cfg_attr(test, automock)]
+
+// Can't use automock attribute macro since it implements multiple traits
+#[cfg(test)]
+mock! {
+    pub PgDatasource {}
+
+    #[async_trait]
+    impl Datasource for PgDatasource {
+        type Error = sqlx::Error;
+
+        async fn select_all_test(&self) -> Result<Vec<TR>, sqlx::Error>;
+        async fn select_last_test(&self) -> Result<TR, sqlx::Error>;
+    }
+
+    #[async_trait]
+    impl auth::AuthDatasource for PgDatasource {
+        type Error = sqlx::Error;
+
+        async fn key_limit(&self, key: &str) -> Result<Option<auth::KeyLimit>, sqlx::Error>;
+    }
+}
+
 #[async_trait]
 impl Datasource for PgDatasource {
     type Error = sqlx::Error;
@@ -54,6 +75,46 @@ impl Datasource for PgDatasource {
         sqlx::query_as("SELECT * FROM test ORDER BY id DESC")
             .fetch_one(&mut conn)
             .await
+    }
+}
+pub mod auth {
+    use super::*;
+    pub(crate) static UNLIMITED_KEY: &'static str = "unlimit";
+
+    #[derive(Debug, Clone)]
+    pub enum KeyLimit {
+        Unlimited,
+        Limit(usize),
+    }
+    #[async_trait]
+    pub trait AuthDatasource: Send + Sync {
+        type Error: std::fmt::Debug;
+
+        async fn key_limit(&self, key: &str) -> Result<Option<KeyLimit>, Self::Error>;
+    }
+
+    #[async_trait]
+    impl AuthDatasource for PgDatasource {
+        type Error = sqlx::Error;
+
+        async fn key_limit(&self, key: &str) -> Result<Option<KeyLimit>, Self::Error> {
+            if key == UNLIMITED_KEY {
+                return Ok(Some(KeyLimit::Unlimited));
+            }
+
+            let mut conn = self.pool.acquire().await?;
+
+            let mut args = PgArguments::default();
+            args.add(key);
+            let limit = sqlx::query_with("SELECT limit FROM key_limit WHERE key = $1", args)
+                .fetch_optional(&mut conn)
+                .await?
+                .map(|r| r.try_get("limit").map(|i: i32| i as usize))
+                .transpose()?
+                .map(KeyLimit::Limit);
+            
+            Ok(limit)
+        }
     }
 }
 
