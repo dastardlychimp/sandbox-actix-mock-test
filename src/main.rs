@@ -13,19 +13,22 @@ use std::sync::Arc;
 async fn main() -> std::io::Result<()> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("debug"));
     let pool = PgPool::connect(env!("DATABASE_URL")).await.unwrap();
-    let arc_db = Arc::new(PgDatasource::new(pool));
+    let arc_db = Arc::new(PgDatasource::new(pool.clone()));
 
     let datasource = Data::from(arc_db.clone() as Arc<dyn Datasource<Error = sqlx::Error>>);
     let auth_datasource =
         Data::from(arc_db.clone() as Arc<dyn auth::AuthDatasource<Error = sqlx::Error>>);
+    let pgdatasource = Data::new(PgDatasource::new(pool));
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
             .app_data(datasource.clone())
             .app_data(auth_datasource.clone())
+            .app_data(pgdatasource.clone())
             .service(handlers::list_extractor)
             .service(handlers::list_with_limits)
             .service(web::resource("/listr").route(web::get().to(handlers::list_request)))
+            .service(web::resource("/listg").route(web::get().to(handlers::list_generic::<PgDatasource, _>)))
             .route("/", web::get().to(|| HttpResponse::Ok()))
     })
     .bind(("127.0.0.1", 5990))?

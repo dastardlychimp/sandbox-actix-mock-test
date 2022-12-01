@@ -1,8 +1,7 @@
 use crate::*;
 use actix_web::{
     web::{self, Data, Json, Query},
-    FromRequest, HttpRequest, Responder, Result as ActixResult, HttpResponse,
-    http::{StatusCode},
+    FromRequest, HttpRequest, Responder, Result as ActixResult,
 };
 use auth::*;
 
@@ -20,6 +19,13 @@ pub async fn list_request(request: HttpRequest) -> ActixResult<Json<Vec<TR>>> {
     let results = datasource.select_all_test().await.unwrap();
 
     Ok(web::Json(results))
+}
+
+pub async fn list_generic<D: Datasource<Error = E>, E: std::fmt::Debug>(
+    datasource: Data<D>
+) -> web::Json<Vec<TR>> {
+    let results = datasource.select_all_test().await.unwrap();
+    web::Json(results)
 }
 
 #[derive(Deserialize)]
@@ -52,7 +58,7 @@ pub async fn list_with_limits(
 mod tests {
     use super::*;
     use crate::{MockPgDatasource, auth::AuthDatasource};
-    use actix_web::{test, App};
+    use actix_web::{test::{self, TestRequest}, App, http::StatusCode};
     use std::sync::Arc;
     use mockall::predicate::*;
 
@@ -75,6 +81,22 @@ mod tests {
             .to_http_request();
 
         let resp = list_request(req.clone()).await.unwrap();
+        assert_eq!(resp.into_inner(), expected);
+    }
+
+    #[actix_rt::test]
+    async fn test_mock_list_generic() {
+        let expected = vec![TR {
+            id: 6,
+            col1: "wyoming".to_string(),
+        }];
+        let expected2 = expected.clone();
+        let mut mock = MockPgDatasource::new();
+        mock.expect_select_all_test()
+            .returning(move || Ok(expected2.to_owned()));
+
+
+        let resp: web::Json<Vec<TR>> = list_generic(Data::new(mock)).await;
         assert_eq!(resp.into_inner(), expected);
     }
 
